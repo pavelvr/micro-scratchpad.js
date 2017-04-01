@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0" />
+    <meta name="author" content="Pável Varela Rodríguez" />
+    <title>&mu;-scratchpad.js</title>
+    <style>
+        body { margin: 0; padding: 0 0 0 10px; overflow: hidden; }
+        h1 { font-size: 1.4em; padding: 5px 0 0 5px; margin: 2px 0 8px 0; font-weight: normal; float: left; width: 49%; height: 30px; }
+        h1 em { color: #bbb; }
+        #buttons { width: 49%; text-align: right; padding: 10px .6% 0 0; height: 25px; margin: 0; float: right; }
+        #buttons button { border: 1px solid #bbb; background-color: #eee; color: #333; font-family: serif; padding: 3px 6px; }
+        #buttons #show-loaded-scripts, #buttons #show-loaded-scripts:visited { color: deepskyblue; text-decoration: none; padding: 1px 2px; }
+        #code, #output { float: left; width: 49%; border: 1px solid #ddd; overflow: auto; margin: 0; padding: 0; outline: none; }
+        #code { resize: none; height: 510px; padding-left: .3%; padding-right: .3%; clear: left; }
+        #code:focus { border-color: deepskyblue; }
+        #output { padding: 5px .3%; height: 500px; font-family: monospace; white-space: pre; }
+        span.console { color: #ccc; }
+        span.error { color: palevioletred; }
+        span.system { color: paleturquoise; }
+        span.system-message { color: #ccc; }
+        hr.separator { margin: 2px 0; padding: 0; border: 0; border-top: 1px dotted #dedede; }
+        div#hidden-area { display: none; }
+    </style>
+</head>
+<body>
+    <h1>&mu;-<em>scratchpad</em>.js</h1>
+    <p id="buttons">
+        <button id="load-script" onclick="loadScript();">Load Script</button>
+        [<a id ="show-loaded-scripts" href="#" title="Show loaded scripts" onclick="showLoadedScripts();return false;">?</a>]
+        <button id="clean-and-eval" onclick="clean();evaljs();">Clean & Eval</button>
+        <button id="cleaner" onclick="clean();">Reset</button>
+        <button id="evaluator" onclick="evaljs();">Eval</button>
+    </p>
+    <textarea name="" id="code" wrap="off"></textarea>
+    <div id="output"></div>
+    
+    <div id="hidden-area">
+        <input type="file" id="script-to-load" accept=".js, text/javascript" onchange="loadScriptFile();" />
+        <div id="scripts"></div>
+    </div>
+    <script>
+        var $_        = (elementId) => document.getElementById(elementId),
+            $_t       = (tag) => document.getElementsByTagName(tag),
+            header    = $_t('h1')[0],
+            code      = $_('code'),
+            output    = $_('output'),
+            buttons   = $_('buttons'),
+            btnClean  = $_('cleaner'),
+            btnCleanEval = $_('clean-and-eval'),
+            btnEval   = $_('evaluator'),
+            scriptToLoad = $_('script-to-load'),
+            replaceCL = (strCode) => strCode.replace(/console\.log/g, 'cl'),
+            dump      = (data, cls) => {
+                var dataType = typeof(data),
+                    str = dataType === 'string'
+                        ? data.replace(/\t/g, '    ')
+                        : dataType === 'number'
+                            ? data.toString()
+                            : JSON.stringify(data);
+                // restoring back previously replaced appearances of console.log
+                str = str.replace(/cl\(/g, 'console.log(');
+                output.innerHTML += '<span class="' + cls +  '">&raquo;</span> ' + str + '\n';
+            },
+            log       = (data) => dump(data, 'console'),
+            cl        = log,
+            error     = (data) => dump(data, 'error'),
+            system    = (data) => dump('<span class="system-message">' + data + '</span>', 'system'),
+            clean     = () => {
+                output.innerHTML = '';
+                code.focus();
+            },
+            evaljs    = () => {
+                if (output.innerHTML.trim() !== '') {
+                    output.innerHTML += '<hr class="separator" />';
+                }
+                try {
+                    var codeToRun = code.selectionStart === code.selectionEnd
+                        ? code.value
+                        : code.value.substring(code.selectionStart, code.selectionEnd);
+                    eval(replaceCL(codeToRun));
+                } catch (e) {
+                    var lineNumber   = e.lineNumber,
+                        columnNumber = e.columnNumber;
+
+                    // e.lineNumber, e.columnNumber and e.stack are not standardized
+                    if ((lineNumber === undefined || columnNumber === undefined) && e.stack !== undefined) {
+                        try {
+                            var fromStack = e.stack
+                                .split(/\n/g)
+                                .filter(line => line.indexOf('eval') !== -1)[0]
+                                .trim()
+                                .split(/[\:\)]/g)
+                                .filter(item => parseInt(item))
+                                .slice(-2);
+                            lineNumber   = fromStack[0];
+                            columnNumber = fromStack[1];
+                        } catch(ignoredException) {}
+                    }
+
+                    var errorSource = lineNumber !== undefined
+                        ? ' [line: ' + lineNumber + ', column: ' + columnNumber + ']'
+                        : '';
+                    error(e.toString() + errorSource);
+                }
+
+                output.scrollTop = output.scrollHeight;
+                code.focus();
+            },
+            getStyle = (node, property) => window.getComputedStyle(node, null).getPropertyValue(property),
+            setStyle = (node, property, value) => node.style[property] = value,
+            layout = (() => {
+                var timer,
+                    delay = 100,
+                    newHeight = (node) => parseFloat(getStyle(node, 'height')) + (window.innerHeight - node.offsetTop - node.clientHeight - 10),
+                    setLayout = () => {
+                        setStyle(code,    'height', newHeight(code)   + 'px');
+                        setStyle(output,  'height', newHeight(output) + 'px');
+                    };
+
+                    return () => {
+                        clearTimeout(timer);
+                        timer = setTimeout(setLayout, delay);
+                    }
+            })();
+
+            code.addEventListener('keydown', (evt) => {
+                var self = evt.target;
+                if (evt.keyCode === 8 || evt.keyCode === 9) { // BackSpace, Tab
+                    var start = self.selectionStart,
+                        end   = self.selectionEnd
+
+                    if (evt.keyCode === 8) {
+                        if (start === end) {
+                            var lineStart = self.value.slice(0, end).lastIndexOf('\n') + 1,
+                                prefix    = self.value.slice(lineStart, end);
+
+                            if (prefix.length > 0 && prefix.trim() === '') {
+                                var cutPrefixAt = prefix.length % 4 === 0
+                                        ? -4
+                                        : prefix.length - (prefix.length % 4);
+                                prefix = prefix.slice(0, cutPrefixAt);
+
+                                self.value = self.value.slice(0, lineStart) + prefix + self.value.slice(end);
+                                self.selectionStart = self.selectionEnd = lineStart + prefix.length;
+                                evt.preventDefault();
+                            }
+                        }
+                    } else if (evt.keyCode === 9) {
+                        self.value = self.value.substring(0, start) + "    " + self.value.substring(end);
+                        self.selectionStart = self.selectionEnd = start + 4;
+                        evt.preventDefault();
+                    }
+                } else if (evt.ctrlKey) {
+                    if (evt.shiftKey && evt.keyCode === 13) { // ENTER
+                        btnCleanEval.click();
+                        evt.preventDefault();
+                    }
+                    if (!evt.shiftKey && evt.keyCode === 13) {
+                        btnEval.click();
+                        evt.preventDefault();
+                    } else if (evt.keyCode === 76) { // L
+                        btnClean.click();
+                        evt.preventDefault();
+                    }
+                }// else { console.log(evt.keyCode); }
+            });
+
+        // dynamically load script
+        var loadScript = () => {
+                scriptToLoad.value = '';
+                scriptToLoad.click();                
+            },
+            loadScriptFile = () => {
+                try
+                { 
+                    // using fileControl.value in non-firefox browsers
+                    // fails because of 'fakepath' security feature
+                    var file = scriptToLoad.files[0];
+                    if (file && file.name.trim() !== '') {
+                        var fileName  = file.name,
+                            scriptId  = fileName.replace(/[^a-zA-Z0-9]/g, ''),
+                            reloaded  = false,
+                            scriptElm = document.createElement('script');
+
+                        if ($_(scriptId)) {
+                            $_('scripts').removeChild($_(scriptId));
+                            reloaded = true;
+                        }
+
+                        scriptElm.setAttribute('id', scriptId);
+                        scriptElm.setAttribute('title', fileName);
+
+                        var reader = new FileReader();
+                        reader.onload = (e) => {
+                            scriptElm.innerHTML = replaceCL(e.target.result);
+                            $_('scripts').appendChild(scriptElm);
+                            system((!reloaded ? 'Loaded' : 'Reloaded') + ' script \'<em>' + fileName + '\'</em>');
+                        }
+                        reader.readAsText(file);
+                    }
+                }
+                catch (e)
+                {
+                    error(e);
+                    alert('Error loading script...');
+                }
+
+                code.focus();
+            },
+            showLoadedScripts = () => {
+                var scripts = document.querySelectorAll('#scripts script');
+                if (scripts.length === 0) {
+                    alert('There are no loaded scripts...');
+                } else {
+                    var list = Array.prototype.map.call(scripts, (s) => s.getAttribute('title'));
+                    alert('Loaded scripts:\n - ' + list.join('\n - '));
+                }
+
+                code.focus();
+            };
+
+        window.addEventListener('load', layout);
+        window.addEventListener('resize', layout);
+
+        code.value = "/*\n"
+                   + "- Hit Ctrl+Enter to evaluate, Ctrl+L to clean output panel\n"
+                   + "- Hit Ctrl+Shift+Enter to clean and evaluate\n"
+                   + "- Use console.log('')/log('') to print results\n"
+                   + "console.log('hello world, from micro-scratchpad.js');\n"
+                   + "//*/\n\n"
+                   + "// Example\n"
+                   + "var min = (values) => Math.min.apply(null, values),\n"
+                   + "    max = (values) => Math.max.apply(null, values),\n"
+                   + "    values = [0, 1, 3, 5, 7, 3, 0, 1, 11, 25];\n\n"
+                   + "console.log('from: ' + values);\n"
+                   + "console.log('min:  ' + min(values));\n"
+                   + "console.log('max:  ' + max(values));\n\n"
+                   + "log('using just log()...');\n\n"
+                   + "log(values);\n\n"
+                   + "// this will throw and error, because of congole\n"
+                   + "congole.log('you won\\\'t see this');\n";
+        code.focus();
+    </script>
+</body>
+</html>
