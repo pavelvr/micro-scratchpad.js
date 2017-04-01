@@ -12,8 +12,9 @@
         #buttons { width: 49%; text-align: right; padding: 10px .6% 0 0; height: 25px; margin: 0; float: right; }
         #buttons button { border: 1px solid #bbb; background-color: #eee; color: #333; font-family: serif; padding: 3px 6px; }
         #buttons #show-loaded-scripts, #buttons #show-loaded-scripts:visited { color: deepskyblue; text-decoration: none; padding: 1px 2px; }
-        #code, #output { float: left; width: 49%; border: 1px solid #ddd; overflow: auto; margin: 0; padding: 0; outline: none; }
-        #code { resize: none; height: 510px; padding-left: .3%; padding-right: .3%; clear: left; }
+        #line-numbers, #code, #output { float: left; width: 47.5%; border: 1px solid #ddd; overflow: auto; margin: 0; padding: 0; outline: none; }
+        #line-numbers { width: 2.7%; height: 510px; border: 0; overflow: hidden; clear: left; padding: 1px .3% 0 0; font-family: monospace; white-space: pre; text-align: right; }
+        #code { resize: none; height: 510px; padding-left: .3%; padding-right: .3%; }
         #code:focus { border-color: deepskyblue; }
         #output { padding: 5px .3%; height: 500px; font-family: monospace; white-space: pre; }
         span.console { color: #ccc; }
@@ -33,7 +34,8 @@
         <button id="cleaner" onclick="clean();">Reset</button>
         <button id="evaluator" onclick="evaljs();">Eval</button>
     </p>
-    <textarea name="" id="code" wrap="off"></textarea>
+    <div id="line-numbers"></div>
+    <textarea name="" id="code" wrap="off" oninput="lineNrs();"></textarea>
     <div id="output"></div>
     
     <div id="hidden-area">
@@ -44,6 +46,7 @@
         var $_        = (elementId) => document.getElementById(elementId),
             $_t       = (tag) => document.getElementsByTagName(tag),
             header    = $_t('h1')[0],
+            lineNumbers = $_('line-numbers'),
             code      = $_('code'),
             output    = $_('output'),
             buttons   = $_('buttons'),
@@ -110,65 +113,45 @@
             },
             getStyle = (node, property) => window.getComputedStyle(node, null).getPropertyValue(property),
             setStyle = (node, property, value) => node.style[property] = value,
+            lineNrs = () => {
+                var lineCount = code.value.split(/\r?\n/g).length,
+                    numbers = [];
+                for (i = 1; i <= lineCount; i++) {
+                    numbers.push(i);
+                }
+                lineNumbers.innerHTML = numbers.join('\n');
+            },
+            setLineNumbers = (() => {
+                var timer,
+                    delay = 50,
+                    syncScroll = () => {
+                        clearTimeout(timer);
+                        lineNumbers.scrollTop = code.scrollTop;
+                        timer = setTimeout(syncScroll, delay);
+                    };
+
+                return () => {
+                    setTimeout(lineNrs, delay);
+                    setTimeout(syncScroll, delay);
+                }
+            })(),
             layout = (() => {
                 var timer,
                     delay = 100,
                     newHeight = (node) => parseFloat(getStyle(node, 'height')) + (window.innerHeight - node.offsetTop - node.clientHeight - 10),
                     setLayout = () => {
-                        setStyle(code,    'height', newHeight(code)   + 'px');
-                        setStyle(output,  'height', newHeight(output) + 'px');
+                        setStyle(lineNumbers, 'height', newHeight(code)   + 'px');
+                        setStyle(code,        'height', newHeight(code)   + 'px');
+                        setStyle(output,      'height', newHeight(output) + 'px');
                     };
 
                     return () => {
                         clearTimeout(timer);
                         timer = setTimeout(setLayout, delay);
                     }
-            })();
-
-            code.addEventListener('keydown', (evt) => {
-                var self = evt.target;
-                if (evt.keyCode === 8 || evt.keyCode === 9) { // BackSpace, Tab
-                    var start = self.selectionStart,
-                        end   = self.selectionEnd
-
-                    if (evt.keyCode === 8) {
-                        if (start === end) {
-                            var lineStart = self.value.slice(0, end).lastIndexOf('\n') + 1,
-                                prefix    = self.value.slice(lineStart, end);
-
-                            if (prefix.length > 0 && prefix.trim() === '') {
-                                var cutPrefixAt = prefix.length % 4 === 0
-                                        ? -4
-                                        : prefix.length - (prefix.length % 4);
-                                prefix = prefix.slice(0, cutPrefixAt);
-
-                                self.value = self.value.slice(0, lineStart) + prefix + self.value.slice(end);
-                                self.selectionStart = self.selectionEnd = lineStart + prefix.length;
-                                evt.preventDefault();
-                            }
-                        }
-                    } else if (evt.keyCode === 9) {
-                        self.value = self.value.substring(0, start) + "    " + self.value.substring(end);
-                        self.selectionStart = self.selectionEnd = start + 4;
-                        evt.preventDefault();
-                    }
-                } else if (evt.ctrlKey) {
-                    if (evt.shiftKey && evt.keyCode === 13) { // ENTER
-                        btnCleanEval.click();
-                        evt.preventDefault();
-                    }
-                    if (!evt.shiftKey && evt.keyCode === 13) {
-                        btnEval.click();
-                        evt.preventDefault();
-                    } else if (evt.keyCode === 76) { // L
-                        btnClean.click();
-                        evt.preventDefault();
-                    }
-                }// else { console.log(evt.keyCode); }
-            });
-
-        // dynamically load script
-        var loadScript = () => {
+            })(),
+            // dynamically load script
+            loadScript = () => {
                 scriptToLoad.value = '';
                 scriptToLoad.click();                
             },
@@ -221,8 +204,50 @@
                 code.focus();
             };
 
+        code.addEventListener('keydown', (evt) => {
+            var self = evt.target;
+            if (evt.keyCode === 8 || evt.keyCode === 9) { // BackSpace, Tab
+                var start = self.selectionStart,
+                    end   = self.selectionEnd
+
+                if (evt.keyCode === 8) {
+                    if (start === end) {
+                        var lineStart = self.value.slice(0, end).lastIndexOf('\n') + 1,
+                            prefix    = self.value.slice(lineStart, end);
+
+                        if (prefix.length > 0 && prefix.trim() === '') {
+                            var cutPrefixAt = prefix.length % 4 === 0
+                                    ? -4
+                                    : prefix.length - (prefix.length % 4);
+                            prefix = prefix.slice(0, cutPrefixAt);
+
+                            self.value = self.value.slice(0, lineStart) + prefix + self.value.slice(end);
+                            self.selectionStart = self.selectionEnd = lineStart + prefix.length;
+                            evt.preventDefault();
+                        }
+                    }
+                } else if (evt.keyCode === 9) {
+                    self.value = self.value.substring(0, start) + "    " + self.value.substring(end);
+                    self.selectionStart = self.selectionEnd = start + 4;
+                    evt.preventDefault();
+                }
+            } else if (evt.ctrlKey) {
+                if (evt.shiftKey && evt.keyCode === 13) { // ENTER
+                    btnCleanEval.click();
+                    evt.preventDefault();
+                }
+                if (!evt.shiftKey && evt.keyCode === 13) {
+                    btnEval.click();
+                    evt.preventDefault();
+                } else if (evt.keyCode === 76) { // L
+                    btnClean.click();
+                    evt.preventDefault();
+                }
+            }// else { console.log(evt.keyCode); }
+        });
         window.addEventListener('load', layout);
         window.addEventListener('resize', layout);
+        window.addEventListener('load', setLineNumbers);
 
         code.value = "/*\n"
                    + "- Hit Ctrl+Enter to evaluate, Ctrl+L to clean output panel\n"
