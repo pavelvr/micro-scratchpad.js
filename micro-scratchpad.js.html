@@ -228,26 +228,23 @@
             };
 
         code.addEventListener('keydown', (evt) => {
-            var self = evt.target;
+            var self = evt.target,
+                start = self.selectionStart,
+                end   = self.selectionEnd;
             if (evt.keyCode === 8 || evt.keyCode === 9) { // BackSpace, Tab
-                var start = self.selectionStart,
-                    end   = self.selectionEnd
+                if (evt.keyCode === 8 && start === end) {
+                    var lineStart = self.value.slice(0, end).lastIndexOf('\n') + 1,
+                        prefix    = self.value.slice(lineStart, end);
 
-                if (evt.keyCode === 8) {
-                    if (start === end) {
-                        var lineStart = self.value.slice(0, end).lastIndexOf('\n') + 1,
-                            prefix    = self.value.slice(lineStart, end);
+                    if (prefix.length > 0 && prefix.trim() === '') {
+                        var cutPrefixAt = prefix.length % 4 === 0
+                                ? -4
+                                : prefix.length - (prefix.length % 4);
+                        prefix = prefix.slice(0, cutPrefixAt);
 
-                        if (prefix.length > 0 && prefix.trim() === '') {
-                            var cutPrefixAt = prefix.length % 4 === 0
-                                    ? -4
-                                    : prefix.length - (prefix.length % 4);
-                            prefix = prefix.slice(0, cutPrefixAt);
-
-                            self.value = self.value.slice(0, lineStart) + prefix + self.value.slice(end);
-                            self.selectionStart = self.selectionEnd = lineStart + prefix.length;
-                            evt.preventDefault();
-                        }
+                        self.value = self.value.slice(0, lineStart) + prefix + self.value.slice(end);
+                        self.selectionStart = self.selectionEnd = lineStart + prefix.length;
+                        evt.preventDefault();
                     }
                 } else if (evt.keyCode === 9) {
                     self.value = self.value.substring(0, start) + "    " + self.value.substring(end);
@@ -258,15 +255,14 @@
                 if (!evt.shiftKey && evt.keyCode === 13) { // ENTER
                     btnCleanEval.click();
                     evt.preventDefault();
-                }
-                if (evt.shiftKey && evt.keyCode === 13) {
+                } else if (evt.shiftKey && evt.keyCode === 13) {
                     btnEval.click();
                     evt.preventDefault();
                 } else if (evt.keyCode === 76) { // L
                     btnClean.click();
                     evt.preventDefault();
                 }
-            }// else { console.log(evt.keyCode); }
+            } // else { console.log(evt.keyCode); }
         });
 
         window.addEventListener('keydown', (evt) => {
