@@ -12,11 +12,12 @@
         #buttons { width: 49%; text-align: right; padding: 10px .6% 0 0; height: 25px; margin: 0; float: right; }
         #buttons button { border: 1px solid #bbb; background-color: #eee; color: #333; font-family: serif; padding: 3px 6px; }
         #buttons a, #buttons #a:visited { color: deepskyblue; text-decoration: none; padding: 1px 2px; }
-        #line-numbers, #code, #output { float: left; width: 47.5%; border: 1px solid #ddd; overflow: auto; margin: 0; padding: 0; outline: none; }
-        #line-numbers { width: 2.7%; height: 510px; border: 0; overflow: hidden; clear: left; padding: 1px .3% 0 0; font-family: monospace; white-space: pre; text-align: right; }
-        #code { resize: none; height: 510px; padding-left: .3%; padding-right: .3%; }
+        #line-numbers, #code, #output { float: left; width: 48.15%; height: 500px; border: 1px solid #ddd; overflow: auto; margin: 0; padding: 0; outline: none; font-family: monospace; white-space: pre; box-sizing: border-box; }
+        #line-numbers { width: 3%; border: 0; overflow: hidden; clear: left; padding: 1px .3% 0 0; text-align: right; }
+        #code { resize: none; padding-left: .3%; padding-right: .3%; }
         #code:focus { border-color: deepskyblue; }
-        #output { padding: 5px .3%; height: 500px; font-family: monospace; white-space: pre; }
+        #output { padding: 5px .3%; }
+        #resize-handle { float: left; width: 0.2%; height: 500px; margin: 0; background-color: #ddd; cursor: col-resize; position: relative; }
         span.console { color: #ccc; }
         span.error { color: palevioletred; }
         span.system { color: paleturquoise; }
@@ -38,6 +39,7 @@
     </p>
     <div id="line-numbers"></div>
     <textarea name="" id="code" wrap="off" oninput="lineNrs();"></textarea>
+    <div id="resize-handle"></div>
     <div id="output"></div>
     
     <div id="hidden-area">
@@ -52,6 +54,7 @@
             lineNumbers = $_('line-numbers'),
             code      = $_('code'),
             output    = $_('output'),
+            resizer   = $_('resize-handle'),
             buttons   = $_('buttons'),
             btnClean  = $_('cleaner'),
             btnCleanEval = $_('clean-and-eval'),
@@ -117,49 +120,6 @@
                 clean();
                 evaljs();
             },
-            scrollOutputAndFocusCode = () => {
-                output.scrollTop = output.scrollHeight;
-                code.focus();
-            },
-            getStyle = (node, property) => window.getComputedStyle(node, null).getPropertyValue(property),
-            setStyle = (node, property, value) => node.style[property] = value,
-            lineNrs = () => {
-                var lineCount = code.value.split(/\r?\n/g).length,
-                    numbers = [];
-                for (i = 1; i <= lineCount; i++) {
-                    numbers.push(i);
-                }
-                lineNumbers.innerHTML = numbers.join('\n');
-            },
-            setLineNumbers = (() => {
-                var timer,
-                    delay = 50,
-                    syncScroll = () => {
-                        clearTimeout(timer);
-                        lineNumbers.scrollTop = code.scrollTop;
-                        timer = setTimeout(syncScroll, delay);
-                    };
-
-                return () => {
-                    setTimeout(lineNrs, delay);
-                    setTimeout(syncScroll, delay);
-                }
-            })(),
-            layout = (() => {
-                var timer,
-                    delay = 100,
-                    newHeight = (node) => parseFloat(getStyle(node, 'height')) + (window.innerHeight - node.offsetTop - node.clientHeight - 10),
-                    setLayout = () => {
-                        setStyle(lineNumbers, 'height', newHeight(code)   + 'px');
-                        setStyle(code,        'height', newHeight(code)   + 'px');
-                        setStyle(output,      'height', newHeight(output) + 'px');
-                    };
-
-                    return () => {
-                        clearTimeout(timer);
-                        timer = setTimeout(setLayout, delay);
-                    }
-            })(),
             // dynamically load script
             loadScript = () => {
                 scriptToLoad.value = '';
@@ -219,13 +179,74 @@
                          + '\t- <kbd>F5</kbd>/<kbd>Ctrl + Enter</kbd>: Clean and evaluate\n'
                          + '\t- <kbd>Ctrl + Shift + Enter</kbd>: Evaluate your code\n'
                          + '\t- <kbd>Ctrl + L</kbd>: Clean output panel\n'
-                         + '\t- <kbd>Ctrl + F5</kbd>: Reload micro-scratchpad.js\n'
+                         + '\t- <kbd>Ctrl + F5</kbd>/<kbd>Ctrl + R</kbd>: Reload micro-scratchpad.js\n'
                          + '\t- <kbd>F1</kbd>: Show this help message\n\n'
                          + 'Use console.log()/log() to show results on output panel:\n'
                          + '\ti.e: console.log(\'hello world, from micro-scratchpad.js\');\n'
                          + '\t or: log(\'hello world, from micro-scratchpad.js\');\n';
                 system(help);
-            };
+            },
+            scrollOutputAndFocusCode = () => {
+                output.scrollTop = output.scrollHeight;
+                code.focus();
+            },
+            getStyle = (node, property) => window.getComputedStyle(node, null).getPropertyValue(property),
+            setStyle = (node, property, value) => node.style[property] = value,
+            lineNrs = () => {
+                var lineCount = code.value.split(/\r?\n/g).length,
+                    numbers = [];
+                for (i = 1; i <= lineCount; i++) {
+                    numbers.push(i);
+                }
+                lineNumbers.innerHTML = numbers.join('\n');
+            },
+            setLineNumbers = (() => {
+                var timer,
+                    delay = 50,
+                    syncScroll = () => {
+                        clearTimeout(timer);
+                        lineNumbers.scrollTop = code.scrollTop;
+                        timer = setTimeout(syncScroll, delay);
+                    };
+
+                return () => {
+                    setTimeout(lineNrs, delay);
+                    setTimeout(syncScroll, delay);
+                }
+            })(),
+            resizePanel = (evt) => {
+                var distance = evt.clientX - resizer.offsetLeft;
+                setStyle(code,   'width', (parseFloat(getStyle(code,   'width')) + distance) + 'px');
+                setStyle(output, 'width', (parseFloat(getStyle(output, 'width')) - distance) + 'px');
+                document.body.style.cursor  = 'col-resize';
+                code.style.cursor           = 'col-resize';
+                scrollOutputAndFocusCode();
+            },
+            stopResizePanel = (evt) => {
+                window.removeEventListener('mousemove', resizePanel);
+                window.removeEventListener('mouseup',   stopResizePanel);
+                document.body.style.cursor  = 'auto';
+                code.style.cursor           = 'auto';
+            },
+            layout = (() => {
+                var timer,
+                    delay = 100,
+                    newHeight = (node) => parseFloat(getStyle(node, 'height')) + (window.innerHeight - node.offsetTop - node.clientHeight - 10),
+                    setLayout = () => {
+                        setStyle(lineNumbers, 'width',  '3%'    );
+                        setStyle(code,        'width',  '48.15%');
+                        setStyle(output,      'width',  '48.15%');
+                        setStyle(lineNumbers, 'height', newHeight(code)   + 'px');
+                        setStyle(code,        'height', newHeight(code)   + 'px');
+                        setStyle(resizer,     'height', newHeight(code)   + 'px');
+                        setStyle(output,      'height', newHeight(output) + 'px');
+                    };
+
+                    return () => {
+                        clearTimeout(timer);
+                        timer = setTimeout(setLayout, delay);
+                    }
+            })();
 
         code.addEventListener('keydown', (evt) => {
             var self = evt.target,
@@ -278,6 +299,11 @@
         window.addEventListener('load', layout);
         window.addEventListener('resize', layout);
         window.addEventListener('load', setLineNumbers);
+
+        resizer.addEventListener('mousedown', (evt) => {
+            window.addEventListener('mousemove', resizePanel);
+            window.addEventListener('mouseup', stopResizePanel);
+        });
 
         code.value = "// Example\n"
                    + "var min = (values) => Math.min.apply(null, values),\n"
